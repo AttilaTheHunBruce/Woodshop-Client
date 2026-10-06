@@ -110,8 +110,12 @@
 #define OVERRIDE_DEBOUNCE_COUNT  3
 
 // ── WiFi / Server ─────────────────────────────────────────────────────────────
-#define WIFI_SSID           "woodshop"
-#define WIFI_PASSWORD       "woodshop"
+// !! BEFORE BUILDING: replace both values below with the shop network's real
+// !! WiFi name and password. The public repository deliberately contains
+// !! placeholders only. The real values are kept in the private system
+// !! document (see "Public repository and credentials"). Never commit them.
+#define WIFI_SSID           "YOUR_SSID"
+#define WIFI_PASSWORD       "YOUR_PASSWORD"
 #define SERVER_PORT         35487
 #define SERVER_HOST_BYTE    5       // server = 192.168.0.5 (derived from client subnet)
 
