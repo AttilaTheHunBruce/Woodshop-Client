@@ -146,8 +146,8 @@
 // As of Aug 2026, Lee Robertshaw writes member cards (WriteNTAG215.py,
 // "Layout v2") and the ESP32 only ever reads them. Layout v2 has NO type/
 // version header and NO signature — see MEMBER CARD LAYOUT below. Config
-// cards are unaffected: they are still written by server app.py
-// /admin/config-card in their original signed format. Because the two
+// cards are written by rfid_admin_card.py (server) and are unsigned too
+// (Oct 2026); see the config card layout below. Because the two
 // formats no longer share a type tag, discrimination works by exclusion:
 // the reader checks for the config card's type byte first (CARD_TYPE_CONFIG
 // at offset 0); anything else is treated as a Layout v2 member card and
@@ -169,19 +169,21 @@
 // ESP32 can no longer verify a member card was issued by the server —
 // it trusts whatever member_id/permissions are written on the card. This
 // was an explicit decision (Aug 2026) to match Lee's writer as-is rather
-// than block on adding signing to WriteNTAG215.py. Config cards still are
-// signature-verified (unchanged).
+// than block on adding signing to WriteNTAG215.py. Config cards are now
+// unsigned too (Oct 2026), so the Ed25519 library and public key are gone.
 //
-// Config card payload layout (5 bytes, signed) — written by server
-// app.py /admin/config-card — UNCHANGED:
-//    byte 0  : CARD_TYPE_CONFIG (0x02)
-//    byte 1  : version (currently 0x01)
-//    byte 2  : machine number (0..255)
-//    byte 3  : blast gate delay (0..15, multiply by 10 for seconds)
-//    byte 4  : reserved (0x00)
-//    5..68   : Ed25519 signature over bytes 0..4
-//    69..71  : padding to page boundary (zeros)
-//   Total: 72 bytes on card; we read CARD_TOTAL_LEN and ignore the tail.
+// Config (admin) card payload layout -- UNSIGNED since Oct 2026 (written by
+// rfid_admin_card.py / the server's Admin Card page):
+//    byte 0     : CARD_TYPE_CONFIG (0x02)
+//    byte 1     : version: 1 = machine + blast only (older cards, whatever
+//                 follows byte 4 is ignored); 2 = also carries a machine name
+//    byte 2     : machine number (1..128 from the writer; client allows 0..255)
+//    byte 3     : blast gate delay (0..15, multiply by 10 for seconds)
+//    byte 4     : reserved (0x00)
+//    bytes 5..20: machine name, 16 bytes ASCII, null-padded (version 2 only;
+//                 shown on the serial monitor, not stored or used)
+//   Total: 21 bytes (version 2) = 6 NTAG215 pages from page 4.
+//   There is no signature: anyone with a card writer can reconfigure a machine.
 #define CARD_TYPE_CONFIG    0x02
 
 // Header (config card only — member cards have no header anymore)
@@ -196,18 +198,19 @@
 #define MEM_PAYLOAD_LEN     52
 #define MEM_MEMBER_ID_LEN    4   // ASCII digit characters, not bytes-as-value
 
-// Config card field offsets (within the 5-byte signed region)
+// Config card field offsets (unsigned; see the config card layout above)
 #define CFG_OFF_MACHINE     2
 #define CFG_OFF_BLAST_RAW   3
 #define CFG_OFF_RESERVED    4
-#define CFG_SIGNED_LEN      5
-#define CFG_VERSION_EXPECTED 0x01
+#define CFG_OFF_NAME        5
+#define CFG_NAME_LEN        16
+#define CFG_VERSION_MIN     1      // oldest accepted (no name field)
+#define CFG_VERSION_NAMED   2      // newest accepted (adds machine name)
 #define CFG_BLAST_UNIT_MS   10000UL   // one blast-delay unit = 10 seconds
 
 #define RFID_POLL_MS        250
 #define RFID_PAGE_START     4
 #define CARD_NAME_LEN       16
-#define CARD_SIG_LEN        64
 // Total bytes we read from the card. Padded to the next 4-byte NTAG page
 // boundary so the page-read loop always reads complete pages. Sized for
 // the LARGER of the two formats: config card (72 bytes) vs. member card

@@ -7,7 +7,6 @@
  *
  * External library dependency:
  *   - Elechouse PN532 library (PN532, PN532_SPI)
- *   - rweather/Crypto (Ed25519) — "Crypto" in the Arduino library manager
  *   - bblanchon/ArduinoJson — "ArduinoJson" in the Arduino library manager
  *     (ota_task.cpp; parses the small firmware manifest object)
  *

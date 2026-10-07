@@ -74,15 +74,6 @@
 #include <SPI.h>
 #include <PN532_SPI.h>
 #include <PN532.h>
-#include <Ed25519.h>
-
-// ── Ed25519 server public key ────────────────────────────────────────────────
-static const uint8_t SERVER_PUBLIC_KEY[32] = {
-    0x99, 0x3d, 0xf7, 0xbe, 0xa0, 0x75, 0x43, 0x0c,
-    0x6e, 0x36, 0xe0, 0xdf, 0x16, 0x63, 0xf7, 0xca,
-    0x42, 0xa3, 0xe1, 0x0d, 0xea, 0x3a, 0xea, 0x35,
-    0x99, 0xc4, 0xea, 0xa8, 0x3d, 0xfd, 0x64, 0x26,
-};
 
 // ── Elechouse library objects ────────────────────────────────────────────────
 // SPI.begin() is called explicitly in _pn532_init() with our remapped pins
@@ -215,8 +206,8 @@ static bool _read_card_bytes(uint8_t* card_buf) {
 
 // ── Crypto + permissions ─────────────────────────────────────────────────────
 // NOTE: member cards (Lee's WriteNTAG215.py "Layout v2", Aug 2026) carry no
-// Ed25519 signature, so there is no member-card verification step anymore —
-// see the SECURITY NOTE in config.h. Config cards are still signed and are
+// Ed25519 signature, so there is no member-card verification step anymore --
+// see the SECURITY NOTE in config.h. Config (admin) cards are also unsigned now and are
 // still verified inline where they're handled below.
 
 // Parse the 4-byte MemberID field as ASCII decimal digits (Layout v2 writes
@@ -662,15 +653,11 @@ void task_rfid(void* arg) {
 
                 // ── Config card ───────────────────────────────────────────
                 if (card_type == CARD_TYPE_CONFIG) {
-                    const uint8_t* cfg_sig = card_buf + CFG_SIGNED_LEN;
-                    if (!Ed25519::verify(cfg_sig, SERVER_PUBLIC_KEY,
-                                         payload, CFG_SIGNED_LEN)) {
-                        Serial.println("[rfid] config card: SIGNATURE INVALID");
-                        led_set(LED_GREEN,  LED_FAST);
-                        led_set(LED_YELLOW, LED_OFF);
-                        continue;
-                    }
-
+                    // Admin (config) cards are NOT signed (Oct 2026 decision):
+                    // anyone with a card writer can reconfigure a machine.
+                    // Layout: 0x02, version, machine, blast units, reserved,
+                    // then (version 2) a 16-byte machine name that the
+                    // client only displays -- it is not stored or used.
                     uint8_t version       = payload[CARD_OFF_VERSION];
                     uint8_t new_machine   = payload[CFG_OFF_MACHINE];
                     uint8_t blast_raw     = payload[CFG_OFF_BLAST_RAW] & 0x0F;
@@ -681,13 +668,27 @@ void task_rfid(void* arg) {
                     Serial.println("========================================");
                     Serial.print  ("  Version       : "); Serial.println(version);
                     Serial.print  ("  Machine #     : "); Serial.println(new_machine);
+                    if (version >= CFG_VERSION_NAMED) {
+                        char cfg_name[CFG_NAME_LEN + 1];
+                        memcpy(cfg_name, payload + CFG_OFF_NAME, CFG_NAME_LEN);
+                        cfg_name[CFG_NAME_LEN] = '\0';
+                        for (int k = 0; k < CFG_NAME_LEN; k++) {
+                            if (cfg_name[k] != '\0' &&
+                                (cfg_name[k] < 0x20 || cfg_name[k] > 0x7E)) cfg_name[k] = '?';
+                        }
+                        Serial.print  ("  Machine name  : "); Serial.println(cfg_name);
+                    }
                     Serial.print  ("  Blast delay   : ");
                     Serial.print(blast_raw * 10); Serial.println(" s");
                     Serial.println();
 
-                    if (version != CFG_VERSION_EXPECTED) {
-                        Serial.print("[rfid] config card version mismatch (expected ");
-                        Serial.print(CFG_VERSION_EXPECTED);
+                    if (version < CFG_VERSION_MIN || version > CFG_VERSION_NAMED) {
+                        Serial.print("[rfid] config card version ");
+                        Serial.print(version);
+                        Serial.print(" not supported (accepted ");
+                        Serial.print(CFG_VERSION_MIN);
+                        Serial.print("..");
+                        Serial.print(CFG_VERSION_NAMED);
                         Serial.println(") -- rejected");
                         led_set(LED_GREEN, LED_FAST);
                         vTaskDelay(pdMS_TO_TICKS(2000));
