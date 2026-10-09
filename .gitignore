@@ -3,6 +3,8 @@
 *.map
 *.args
 *.csv
+*.json
+flash_args
 sdkconfig
 !build/esp32.esp32.esp32/Client.ino.bin
 secrets.h
