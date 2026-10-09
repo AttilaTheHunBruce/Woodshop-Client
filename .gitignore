@@ -1,4 +1,8 @@
-build/
 *.bin
 *.elf
+*.map
+*.args
+*.csv
+sdkconfig
+!build/esp32.esp32.esp32/Client.ino.bin
 secrets.h
